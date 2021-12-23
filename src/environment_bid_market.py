@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import pandas as pd
+import numpy.random as random
 
 import gym
 from gym import spaces
@@ -8,7 +9,7 @@ from collections import deque
 
 from src.market_clearing import market_clearing
 from src.agent_ddpg import agent_ddpg
-from src.demand_models import demand_normal
+from src.demand_models import demand_normal, sampleLogNormal
 
 
 class EnvironmentBidMarket(gym.Env):
@@ -22,7 +23,10 @@ class EnvironmentBidMarket(gym.Env):
     """
     #metadata = {'render.modes': ['human']}
 
-    def __init__(self, capacities, costs, demand =[500, 501], agents = 1, fringe_player=1, past_action = 1, lr_actor = 1e-6, lr_critic = 1e-4, normalization = 'none', reward_scaling = 1, action_limits = [-1,1], rounds_per_episode = 1):              
+    def __init__(self, capacities, costs, demand =[500, 501], agents = 1, fringe_player=1, 
+                 past_action = 1, lr_actor = 1e-6, lr_critic = 1e-4, 
+                 normalization = 'none', reward_scaling = 1, action_limits = [-1,1], 
+                 rounds_per_episode = 1, number_of_scenarios = 1 ):              
         super(EnvironmentBidMarket, self).__init__()
         
         # basic game parameters considering the agents
@@ -31,6 +35,7 @@ class EnvironmentBidMarket(gym.Env):
         self.agents = agents
         self.action_limits = action_limits
         self.rounds_per_episode = rounds_per_episode
+        self.number_of_scenarios = number_of_scenarios
         
         # Determine type of demand model
         if  type(demand) == float or type(demand) == list:           
@@ -42,14 +47,6 @@ class EnvironmentBidMarket(gym.Env):
             # Create normal demand model
             self.demand_model = demand_normal(self.means,self.variances)
             
-        # Determine exogenous supply
-        #path = os.path.join(os.path.dirname(__file__), '../data/exogenous_supply/test_supply.xls')
-        #self.exo_supply = pd.read_excel(path)
-        # label fringe by self.agents to get one label higher than highest agent
-        self.exo_supply = np.array([[self.agents,0.2,0.3,0.,0.2],
-                                    [self.agents,6,0.5,0.,6]])
-        
-        
         # additional options
         self.fringe_player = fringe_player
         self.reward_scaling = reward_scaling # rescaling the rewards to avoid hard weight Updates of the Criticer 
@@ -139,32 +136,55 @@ class EnvironmentBidMarket(gym.Env):
     def step(self, action):
         
         self.current_step += 1
-        
-        # set up all the agents as suppliers in the market
-        agent_suppliers = self.set_up_suppliers(action, self.agents)
-        total_supply = np.concatenate((agent_suppliers, self.exo_supply))
-        print(total_supply)
-
+        self.last_action= action
+      
         # get current state        
         obs = self._next_observation()
         demand = obs[0]
         
-        # market_clearing: orders all suppliers from lowest to highest bid, 
-        # last bid of cumsum offerd capacitys determines the price; also the real sold quantities are derived
-        # if using splits, convert them in the right shape for market_clearing-function 
-        # and after that combine sold quantities of the same supplier again
-        market_price, _ , sold_quantities = market_clearing(demand, total_supply)
-        self.last_action= action
-        #print(sold_quantities)
+        # determine exogenous supply parameters
+        exo_size        = 10
+        exo_bid_increase= np.ones(exo_size)*0.5             # on average constant
+        exo_bid_var     = np.array(range(exo_size))*0.1     # increasing var
+        exo_cap_increase= np.ones(exo_size)*0.5             # on average constant
+        exo_cap_var     = np.zeros(exo_size)                # constant capacity
         
-        # save last actions for next state (= next obeservation) and sort them by lowest bids
-        self.last_action = np.sort(self.last_action, axis = None)
-
-
-        # calculate rewards
-        reward = self.reward_function(agent_suppliers, sold_quantities, market_price, self.agents, action)
+        exo_bids = sampleLogNormal(exo_bid_increase, exo_bid_var, 
+                                   self.number_of_scenarios,seed=random.randint(0,1000))
+        exo_caps = sampleLogNormal(exo_cap_increase,exo_cap_var,
+                                   self.number_of_scenarios,seed=random.randint(0,1000))
         
-
+        scenario_rewards = np.zeros((self.number_of_scenarios,self.agents))
+        for scenario in range(self.number_of_scenarios):
+            # set up all the agents in the market format
+            agent_suppliers = self.set_up_suppliers(action, self.agents)
+            
+            # set up all the exogenous supply in the market format
+            exo_supply = np.array([np.ones(exo_size)*(self.agents+1), #Label for ExoSupply
+                                  exo_caps[scenario],           # Capacities
+                                  exo_bids[scenario],           # Bids
+                                  np.zeros(exo_size),           # Costs
+                                  exo_caps[scenario]]).T         # Capacities
+            
+            total_supply = np.concatenate((agent_suppliers, exo_supply))
+            print('Scenario', scenario)
+            print(exo_supply)
+            print(total_supply)
+    
+    
+            
+            # market_clearing: orders all suppliers from lowest to highest bid, 
+            # last bid of cumsum offerd capacitys determines the price; also the real sold quantities are derived
+            # if using splits, convert them in the right shape for market_clearing-function 
+            # and after that combine sold quantities of the same supplier again
+            market_price, _ , sold_quantities = market_clearing(demand, total_supply)
+           
+            
+            # calculate rewards
+            scenario_rewards[scenario] = self.reward_function(agent_suppliers, sold_quantities, market_price, self.agents, action)
+            
+        
+        
         # Intersting Variables and Render Commands 
         self.safe(action, self.current_step)
         self.sold_quantities = sold_quantities
@@ -178,9 +198,8 @@ class EnvironmentBidMarket(gym.Env):
         self.sum_action += action
         self.avg_action = self.sum_action/self.current_step
         
-        self.last_rewards = reward
-        self.sum_rewards += reward
-        self.avg_rewards = self.sum_rewards/self.current_step
+        self.last_rewards = scenario_rewards
+        self.rewards_scenario_averaged = scenario_rewards.sum(axis=0)/self.number_of_scenarios
         
         
         #### DONE and next_state
@@ -189,7 +208,7 @@ class EnvironmentBidMarket(gym.Env):
         obs = self._next_observation()
         
 
-        return obs, reward, done, {}
+        return obs, self.rewards_scenario_averaged, done, {}
     
     
     def safe(self, action, current_step):
@@ -226,7 +245,6 @@ class EnvironmentBidMarket(gym.Env):
         self.avg_action = 0
         self.sum_action = 0
         self.sum_demand = 0
-        self.sum_rewards = 0
         self.avg_rewards = 0
         self.AllAktionen = deque(maxlen=500)
         

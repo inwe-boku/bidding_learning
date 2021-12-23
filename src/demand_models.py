@@ -85,7 +85,7 @@ def recoverOfferCurve(mu, sigmaSquare):
         
     return np.cumsum(np.exp(mu + .5 * sigmaSquare))
     
-def sampleOfferCurves(loc, shape, N, seed=42):
+def sampleLogNormal(loc, shape, N, seed=42):
     '''
     mu and sigmaSquare must be np.arrays of mean and variance of log normal distributed offer curve step increments
     More precisely, define: y := log(y_k) if k =0
@@ -115,4 +115,4 @@ def sampleOfferCurves(loc, shape, N, seed=42):
     '''
     rng = default_rng(seed)
     return np.cumsum(np.vstack([rng.lognormal(np.log(loc[j]**2/(np.sqrt(loc[j]**2 + shape[j]**2))), np.sqrt(np.log(1+(shape[j]**2/loc[j]**2))), N) for j in range(len(loc))]).T, 1)
-    
+    # Attention 0 expected increase yields /0 error
