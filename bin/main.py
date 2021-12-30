@@ -143,8 +143,14 @@ for test_run in  range(TOTAL_TEST_RUNS):
     
     # set up environment
     env = EnvironmentBidMarket(capacities=POWER_CAPACITIES, costs=PRODUCTION_COSTS, demand=DEMAND, agents=NUMBER_OF_AGENTS,
-                               fringe_player=FRINGE, past_action=PAST_ACTION, lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC,
-                               normalization=NORMALIZATION_METHOD, reward_scaling=REWARD_SCALING, action_limits=ACTION_LIMITS, rounds_per_episode=ROUNDS_PER_EPISODE)
+                               fringe_player=FRINGE, past_action=PAST_ACTION, 
+                               lr_actor=LEARNING_RATE_ACTOR, 
+                               lr_critic=LEARNING_RATE_CRITIC,
+                               normalization=NORMALIZATION_METHOD, 
+                               reward_scaling=REWARD_SCALING, 
+                               action_limits=ACTION_LIMITS, 
+                               rounds_per_episode=ROUNDS_PER_EPISODE,
+                               number_of_scenarios=2)
     # set up agents (ddpg)
     agents = env.create_agents(env)
     

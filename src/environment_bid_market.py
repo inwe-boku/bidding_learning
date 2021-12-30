@@ -143,7 +143,7 @@ class EnvironmentBidMarket(gym.Env):
         demand = obs[0]
         
         # determine exogenous supply parameters
-        exo_size        = 10
+        exo_size        = 100
         exo_bid_increase= np.ones(exo_size)*0.5             # on average constant
         exo_bid_var     = np.array(range(exo_size))*0.1     # increasing var
         exo_cap_increase= np.ones(exo_size)*0.5             # on average constant
@@ -155,6 +155,7 @@ class EnvironmentBidMarket(gym.Env):
                                    self.number_of_scenarios,seed=random.randint(0,1000))
         
         scenario_rewards = np.zeros((self.number_of_scenarios,self.agents))
+        scenario_prices = np.zeros((self.number_of_scenarios,self.agents))
         for scenario in range(self.number_of_scenarios):
             # set up all the agents in the market format
             agent_suppliers = self.set_up_suppliers(action, self.agents)
@@ -168,8 +169,8 @@ class EnvironmentBidMarket(gym.Env):
             
             total_supply = np.concatenate((agent_suppliers, exo_supply))
             print('Scenario', scenario)
-            print(exo_supply)
-            print(total_supply)
+            #print(exo_supply)
+            #print(total_supply)
     
     
             
@@ -182,13 +183,13 @@ class EnvironmentBidMarket(gym.Env):
             
             # calculate rewards
             scenario_rewards[scenario] = self.reward_function(agent_suppliers, sold_quantities, market_price, self.agents, action)
-            
+            scenario_prices[scenario] = market_price
         
         
         # Intersting Variables and Render Commands 
         self.safe(action, self.current_step)
         self.sold_quantities = sold_quantities
-        self.market_price = market_price
+        self.market_price = scenario_prices
         self.Suppliers = agent_suppliers 
         
         self.last_demand = demand 
@@ -272,7 +273,8 @@ class EnvironmentBidMarket(gym.Env):
         #print(f'last sold Qs:{self.sold_quantities}')
         #print(f'Last Market Price: {self.market_price}')
         #print(f'Average Reward: {self.avg_rewards}')
-        print(f'Average Demand: {self.avg_demand}','Cumulative Demand',self.sum_demand)
+        print(f'Average Demand: {self.avg_demand}')
+        #print(f'Average Demand: {self.avg_demand}','Cumulative Demand',self.sum_demand)
         print('Market Price:', self.market_price)
         print('Reward', self.last_rewards)
         
