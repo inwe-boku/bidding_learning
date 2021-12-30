@@ -1,4 +1,7 @@
 # Bidding-Learning 
+**Verstion 1.0.4b Forked in Order to incorparate Exogenous Supply Scenarios**
+- Exogenous Supply now created according to log normal distribution
+
 **Version 1.0.3a Forked in Order to incorporate Single Player and Normal Distributed Demand**
 
 **Version 1.0.2** - [Change log](CHANGELOG.md)
