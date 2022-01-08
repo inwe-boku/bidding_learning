@@ -28,13 +28,12 @@ costs:        np.array 1x(number of Agents)
 Attention these np.arrays have to correspond to the number of Agents
 
 Demand:       np.array 1x2 (Uniform,Constant demand)
+                tuple 1x2  (Normal demand with meand and standard deviation as specified)
                 
-Chooses demand from arang between [min,max-1]
-For fixed Demand, write: the preferred [Number, Number +1] (e.g. Demand = 99 -> [99,100])
+Chooses demand from arange between [min,max-1]
 
-              or
-              
-              2-tuple of np.arrays (Normal Demand)
+For fixed Demand, write: the preferred [Number, Number +1] (e.g. Demand = 99 -> [99,100])
+              or 2-tuple of np.arrays (Normal Demand)
 
 Chooses demand from a sequence of normal distributions
 with means and variances as specified by the np.arrays
@@ -73,7 +72,7 @@ mean=np.array([6,6,6,6,6])
 var=np.array([9,0,9,0,4])
 DEMAND = (mean,var)
 #[70 / 100, 70 / 100]  # 70
-ACTION_LIMITS = [-1, 1]  # [-10/100,100/100]#[-100/100,100/100]
+ACTION_LIMITS = [0, 100]  # [-10/100,100/100]#[-100/100,100/100]
 NUMBER_OF_AGENTS = 1
 PAST_ACTION = 0
 FRINGE = 0
@@ -91,9 +90,10 @@ DECAY_RATE = 0.001  # 0.0004 strong; 0.0008 medium; 0.001 soft; # if 0: Not used
 REGULATION_COEFFICENT = 10  # if 1: Not used, if:0: only simple Noise used
 
 TOTAL_TEST_RUNS = 1 # How many runs should be executed
-EPISODES_PER_TEST_RUN = 30 # 10000 # How many episodes should one run contain
+EPISODES_PER_TEST_RUN = 100 # 10000 # How many episodes should one run contain
 ROUNDS_PER_EPISODE = 24 # How many rounds are allowed per episode (right now number of rounds has no impact -due 'done' is executed if step >= round- and choosing 1 is easier to interpret; )
-BATCH_SIZE = 128 # *0.5 # *2
+BATCH_SIZE = 12 #128 # *0.5 # *2
+SCENARIOS = 2
 
 # "Completely reproducible results are not guaranteed across PyTorch releases, individual commits, or different platforms. 
 # Furthermore, results may not be reproducible between CPU and GPU executions, even when using identical seeds."
@@ -150,7 +150,7 @@ for test_run in  range(TOTAL_TEST_RUNS):
                                reward_scaling=REWARD_SCALING, 
                                action_limits=ACTION_LIMITS, 
                                rounds_per_episode=ROUNDS_PER_EPISODE,
-                               number_of_scenarios=2)
+                               number_of_scenarios=SCENARIOS)
     # set up agents (ddpg)
     agents = env.create_agents(env)
     
@@ -213,7 +213,9 @@ for test_run in  range(TOTAL_TEST_RUNS):
                 break
         
     
-    # save running tim in dictionary
+    # save running time in dictionary
+    #env.writer.add_custom_scalars(Results['meta-data'])
+    env.writer.close()
     t_end = time.time()
     time_total = t_end - t_0
     Results[test_run]['runtime'] = time_total
@@ -223,11 +225,12 @@ for test_run in  range(TOTAL_TEST_RUNS):
     # the total number of episodes per run, the actual run, which curves shoul be plotted (options: 'actions', rewards' or 'both'),
     # a title for the plot, rescale parameters if needed (usage: rescale[param for actions, param for rewards, param for bid limit])
     # and a window "moving_window" for which a moving median gets computed (recommended for presntation reasons) 
+    '''
     plot_run_outcome(Results, NUMBER_OF_AGENTS, ACTION_LIMITS[1], 52,
                        EPISODES_PER_TEST_RUN, test_run, curves='actions',
                        title='Norm:{} Agents:{} PA: {} Fringe: {}, Run:{}'.format(NORMALIZATION_METHOD, NUMBER_OF_AGENTS, PAST_ACTION, FRINGE, test_run),
                        rescale=[100, 1000, 100], moving_window=9)
-    
+    '''
     # save plots (uncommment ALL below)
     # plt.savefig('temp{}.pdf'.format(test_run))
     # plt.close()

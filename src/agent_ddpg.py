@@ -12,6 +12,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class agent_ddpg:
     def __init__(self, env, hidden_size=[400, 300], actor_learning_rate=1e-4, critic_learning_rate=1e-3, gamma=0.99, tau=1e-3, max_memory_size=50000, norm = 'none'):
         
+        self.env = env
+        
         #BiddingMarket_energy_Environment Params
         self.num_states = env.observation_space.shape[0]
         self.num_actions = env.action_space.shape[0]
@@ -24,8 +26,8 @@ class agent_ddpg:
         self.output_size = 1 #only for critic
         
         # Networks
-        self.actor = Actor(self.num_states, self.hidden_size, self.num_actions, norm = self.norm).to(device)
-        self.actor_target = Actor(self.num_states, self.hidden_size, self.num_actions, norm = self.norm).to(device)
+        self.actor = Actor(self.num_states, self.hidden_size, self.num_actions, self.env.action_space.high, norm = self.norm).to(device)
+        self.actor_target = Actor(self.num_states, self.hidden_size, self.num_actions, self.env.action_space.high, norm = self.norm).to(device)
         self.critic = Critic(self.num_states, self.hidden_size, self.output_size, self.num_actions, norm = self.norm).to(device)
         self.critic_target = Critic(self.num_states, self.hidden_size, self.output_size, self.num_actions, norm = self.norm).to(device)
 

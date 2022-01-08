@@ -1,7 +1,11 @@
 import numpy as np
 import os
+import datetime
 import pandas as pd
 import numpy.random as random
+import torch
+#from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 import gym
 from gym import spaces
@@ -21,13 +25,14 @@ class EnvironmentBidMarket(gym.Env):
     Once set_up, it receives actions from players, 
     then outputs rewards and determines next state of environment
     """
-    #metadata = {'render.modes': ['human']}
 
     def __init__(self, capacities, costs, demand =[500, 501], agents = 1, fringe_player=1, 
                  past_action = 1, lr_actor = 1e-6, lr_critic = 1e-4, 
                  normalization = 'none', reward_scaling = 1, action_limits = [-1,1], 
                  rounds_per_episode = 1, number_of_scenarios = 1 ):              
         super(EnvironmentBidMarket, self).__init__()
+        
+        self.total_training_steps = 0
         
         # basic game parameters considering the agents
         self.capacities = capacities
@@ -79,8 +84,12 @@ class EnvironmentBidMarket(gym.Env):
             observation_space_size = 1 + self.agents
         
         
-        # Set observation space continious   
+        # Set observation space continous   
         self.observation_space = spaces.Box(low=self.action_limits[0], high=self.action_limits[1], shape=(observation_space_size,1), dtype=np.float16)
+        
+        # Set tenserboard writer
+        self.writer = SummaryWriter(comment='{:%Y%m%d-%H%M}'.format(datetime.datetime.now()))            
+
         
     
     def create_agents(self, env):
@@ -136,6 +145,7 @@ class EnvironmentBidMarket(gym.Env):
     def step(self, action):
         
         self.current_step += 1
+        self.total_training_steps += 1
         self.last_action= action
       
         # get current state        
@@ -151,11 +161,13 @@ class EnvironmentBidMarket(gym.Env):
         
         exo_bids = sampleLogNormal(exo_bid_increase, exo_bid_var, 
                                    self.number_of_scenarios,seed=random.randint(0,1000))
-        exo_caps = sampleLogNormal(exo_cap_increase,exo_cap_var,
+        exo_caps = sampleLogNormal(exo_cap_increase, exo_cap_var,
                                    self.number_of_scenarios,seed=random.randint(0,1000))
         
         scenario_rewards = np.zeros((self.number_of_scenarios,self.agents))
         scenario_prices = np.zeros((self.number_of_scenarios,self.agents))
+        scenario_sales = np.zeros((self.number_of_scenarios,self.agents))
+        
         for scenario in range(self.number_of_scenarios):
             # set up all the agents in the market format
             agent_suppliers = self.set_up_suppliers(action, self.agents)
@@ -184,6 +196,7 @@ class EnvironmentBidMarket(gym.Env):
             # calculate rewards
             scenario_rewards[scenario] = self.reward_function(agent_suppliers, sold_quantities, market_price, self.agents, action)
             scenario_prices[scenario] = market_price
+            scenario_sales[scenario] = sold_quantities[0] #just pick agent, not exo_supply
         
         
         # Intersting Variables and Render Commands 
@@ -200,16 +213,17 @@ class EnvironmentBidMarket(gym.Env):
         self.avg_action = self.sum_action/self.current_step
         
         self.last_rewards = scenario_rewards
-        self.rewards_scenario_averaged = scenario_rewards.sum(axis=0)/self.number_of_scenarios
-        
+        self.reward_scenario_averaged = scenario_rewards.sum(axis=0)/self.number_of_scenarios
+        self.market_price_scenario_averaged = scenario_prices.sum(axis=0)/self.number_of_scenarios 
+        self.sales_scenario_averaged = scenario_sales.sum(axis=0)/self.number_of_scenarios
         
         #### DONE and next_state
-        self.render()
+        self.render(mode='tensorboard')
         done = self.current_step >= self.rounds_per_episode
         obs = self._next_observation()
         
 
-        return obs, self.rewards_scenario_averaged, done, {}
+        return obs, self.reward_scenario_averaged, done, {}
     
     
     def safe(self, action, current_step):
@@ -263,22 +277,42 @@ class EnvironmentBidMarket(gym.Env):
         
         return self._next_observation()
     
-    def render(self, mode='demand', close=False):
-        # Calls an output of several important parameters during the learning
-        # This defines the content of the output
-        #print(f'AllAktionen: {self.AllAktionen}')
-        print('Episode',self.current_episode,'Step',self.current_step)
-        print(f'Last Demand: {self.last_demand}')
-        #print(f'Last Reward of this Episode: {self.last_rewards}')
-        #print(f'last sold Qs:{self.sold_quantities}')
-        #print(f'Last Market Price: {self.market_price}')
-        #print(f'Average Reward: {self.avg_rewards}')
-        print(f'Average Demand: {self.avg_demand}')
-        #print(f'Average Demand: {self.avg_demand}','Cumulative Demand',self.sum_demand)
-        print('Market Price:', self.market_price)
-        print('Reward', self.last_rewards)
+    def render(self, mode='text', close=False):
         
-        
-        
-        
-        
+        if mode == 'text':
+            # Calls print output of several important parameters
+            
+            #print(f'AllAktionen: {self.AllAktionen}')
+            print('Episode',self.current_episode,'Step',self.current_step)
+            print(f'Last Demand: {self.last_demand}')
+            #print(f'Last Reward of this Episode: {self.last_rewards}')
+            #print(f'last sold Qs:{self.sold_quantities}')
+            #print(f'Last Market Price: {self.market_price}')
+            #print(f'Average Reward: {self.avg_rewards}')
+            print(f'Average Demand: {self.avg_demand}')
+            #print(f'Average Demand: {self.avg_demand}','Cumulative Demand',self.sum_demand)
+            print('Market Price:', self.market_price)
+            print('Scenario Rewards:', self.last_rewards)
+            print('Avg Reward over Secarios:', self.reward_scenario_averaged)
+        elif mode == 'tensorboard':
+            # Prints output and saves to tensorboard streams
+
+            #print(f'AllAktionen: {self.AllAktionen}')
+            print('Episode',self.current_episode,'Step',self.current_step)
+            print(f'Last Demand: {self.last_demand}')
+            self.writer.add_scalar('Demand', self.last_demand, self.total_training_steps)
+            #print(f'Last Reward of this Episode: {self.last_rewards}')
+            #print(f'last sold Qs:{self.sold_quantities}')
+            #print(f'Last Market Price: {self.market_price}')
+            #print(f'Average Reward: {self.avg_rewards}')
+            print(f'Average Demand: {self.avg_demand}')
+            #print(f'Average Demand: {self.avg_demand}','Cumulative Demand',self.sum_demand)
+            print('Market Price:', self.market_price)
+            self.writer.add_scalar('Market Price (Scenario Averaged)', self.market_price_scenario_averaged, self.total_training_steps)
+            self.writer.add_scalar('Sales (Scenario Averaged)', self.sales_scenario_averaged, self.total_training_steps)            
+            print('Scenario Rewards:', self.last_rewards)
+            print('Avg Reward over Scenarios:', self.reward_scenario_averaged)
+            self.writer.add_scalar('Reward (Scenario Averaged)', self.reward_scenario_averaged, self.total_training_steps)
+            self.writer.add_scalar('Capacity', np.array(self.capacities), self.total_training_steps)
+            self.writer.add_scalar('Production Cost', np.array(self.costs), self.total_training_steps)
+            self.writer.add_scalar('Agent Bid (Identical over all Scenarios)', self.last_action, self.total_training_steps)
