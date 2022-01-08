@@ -1,5 +1,6 @@
 import os, sys
 path = os.path.dirname(os.path.realpath('__file__'))
+#path = os.path.join(os.path.dirname(sys.prefix), 'git/bin')
 os.chdir(path)
 sys.path.append(os.path.dirname(path))
 
