@@ -84,10 +84,6 @@ class GaussianNoise(object):
         self.action_dim      = action_space.shape[0]
         self.low             = action_space.low
         self.high            = action_space.high
-        # only relevant for Discrete action_space
-        if len(self.low) > 3:
-            self.low = 0
-            self.high = 1
             
         self.distance        = abs(self.low - self.high)
         
@@ -107,8 +103,9 @@ class GaussianNoise(object):
          
         noise_list = np.random.normal(self.mu, self.sigma, self.action_dim)* ((1 - self.decay_rate)**step) * self.regulation_coef 
         
-        if ((noise_list)**2)**0.5 < 0.01:
-            noise_list = np.random.normal(0,0.01,self.action_dim) 
+        # What is this!?
+        #if ((noise_list)**2)**0.5 < 0.01:
+        #    noise_list = np.random.normal(0,0.01,self.action_dim) 
         
         noisy_action = np.clip(action + noise_list, self.low, self.high)
 
